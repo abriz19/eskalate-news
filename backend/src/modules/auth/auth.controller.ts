@@ -1,7 +1,7 @@
 import type { RequestHandler } from "express";
 import { PrismaClient } from "@prisma/client";
 import argon2 from "argon2";
-import jwt from "jsonwebtoken";
+import jwt, { type SignOptions } from "jsonwebtoken";
 import { z } from "zod";
 
 const prisma = new PrismaClient();
@@ -28,7 +28,6 @@ const loginSchema = z.object({
 });
 
 // Register
-
 export const register: RequestHandler = async (req, res) => {
   try {
     const { name, email, password, role } = registerSchema.parse(req.body);
@@ -74,10 +73,9 @@ export const login: RequestHandler = async (req, res) => {
 
     const token = jwt.sign(
       { sub: user.id, role: user.role },
-      process.env.JWT_SECRET!,
-      { expiresIn: "1d" },
+      process.env.JWT_SECRET as string,
+      { expiresIn: Number(process.env.EXPIRES_IN_SECONDS) },
     );
-
     res.json({ token });
   } catch (err: any) {
     res.status(400).json({ message: err.message });
