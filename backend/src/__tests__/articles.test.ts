@@ -1,7 +1,3 @@
-/**
- * Unit tests for Articles API: public feed, create, update, delete, get my articles, get by id.
- * Prisma is mocked; JWT auth and RBAC (AUTHOR vs READER) are tested.
- */
 import request from "supertest";
 import {
   expectBaseResponse,
@@ -198,7 +194,6 @@ describe("Articles API", () => {
   });
 
   describe("GET /api/articles/:id (single article with read tracking)", () => {
-    // Use same UUID as in path so param validation passes (Zod 4 strict UUID).
     const article = {
       id: TEST_ARTICLE_ID,
       title: "One Article",
@@ -226,7 +221,6 @@ describe("Articles API", () => {
         title: article.title,
         status: "PUBLISHED",
       });
-      // Read log may be created async; allow it to have been called
       await new Promise((r) => setImmediate(r));
       expect(mockReadLogCreate).toHaveBeenCalledWith({
         data: { articleId: TEST_ARTICLE_ID, readerId: null },
@@ -275,11 +269,9 @@ describe("Articles API", () => {
       mockArticleFindFirst.mockResolvedValue(article);
       mockReadLogCreate.mockResolvedValue({});
 
-      // First request: allowed to log (guest)
       await request(app).get(`/api/articles/${TEST_ARTICLE_ID}`).expect(200);
       await new Promise((r) => setImmediate(r));
 
-      // Second request within cooldown (same guest, same article): should not log again
       await request(app).get(`/api/articles/${TEST_ARTICLE_ID}`).expect(200);
       await new Promise((r) => setImmediate(r));
 

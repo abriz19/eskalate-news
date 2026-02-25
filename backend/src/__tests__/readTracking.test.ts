@@ -1,7 +1,3 @@
-/**
- * Unit tests for read-tracking cooldown: at most one ReadLog per (article, reader) per 10 seconds.
- * Tests canLogRead, pruneReadTracking, and resetReadTrackingForTests in isolation.
- */
 import {
   canLogRead,
   pruneReadTracking,

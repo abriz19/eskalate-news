@@ -1,7 +1,3 @@
-/**
- * Unit tests for Author Dashboard API: GET /api/author/dashboard.
- * Prisma is mocked; only AUTHOR role is allowed.
- */
 import request from "supertest";
 import {
   expectBaseResponse,

@@ -1,7 +1,3 @@
-/**
- * Unit tests for Auth API: /api/auth/register, /api/auth/login.
- * Prisma and argon2 are mocked; no real DB or hashing.
- */
 import request from "supertest";
 import {
   expectBaseResponse,
@@ -10,7 +6,6 @@ import {
   TEST_USER_READER,
 } from "./helpers.js";
 
-// Mock Prisma before any module under test is loaded
 const mockUserFindUnique = jest.fn();
 const mockUserCreate = jest.fn();
 jest.mock("../lib/prisma.js", () => ({
@@ -21,13 +16,11 @@ jest.mock("../lib/prisma.js", () => ({
   },
 }));
 
-// Mock argon2 so we don't depend on real hashing
 jest.mock("argon2", () => ({
   hash: jest.fn().mockResolvedValue("mock-hashed-password"),
   verify: jest.fn().mockResolvedValue(true),
 }));
 
-// Load app after mocks (app mounts routes that use prisma and argon2)
 import app from "../app.js";
 
 describe("Auth API", () => {
