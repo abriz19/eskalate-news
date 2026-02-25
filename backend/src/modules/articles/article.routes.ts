@@ -1,10 +1,14 @@
 import { Router } from "express";
-import { requireAuth, requireRole, optionalAuth } from "../../middleware/rbac.js";
+import {
+  requireAuth,
+  requireRole,
+  optionalAuth,
+} from "../../middleware/rbac.js";
 import {
   createArticle,
   updateArticle,
   deleteArticle,
-  getArticlesMe,
+  getMyArticles,
   getPublicFeed,
   getArticleById,
 } from "./article.controller.js";
@@ -12,7 +16,7 @@ import {
 const router = Router();
 
 router.get("/", getPublicFeed);
-router.get("/me", requireAuth, requireRole("AUTHOR"), getArticlesMe);
+router.get("/me", requireAuth, requireRole("AUTHOR"), getMyArticles);
 router.get("/:id", optionalAuth, getArticleById);
 router.post("/", requireAuth, requireRole("AUTHOR"), createArticle);
 router.put("/:id", requireAuth, requireRole("AUTHOR"), updateArticle);

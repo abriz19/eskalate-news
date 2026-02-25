@@ -46,7 +46,6 @@ export const createArticle: RequestHandler = async (req, res) => {
     data: {
       ...parsed.data,
       authorId: reqUser.user.sub,
-      status: "DRAFT",
     },
     select: articleSelect,
   });
@@ -135,24 +134,18 @@ export const deleteArticle: RequestHandler = async (req, res) => {
   }
   const reqUser = req as unknown as IRequestUser;
   const { id } = paramResult.data;
-  const existing = await prisma.article.findFirst({
-    where: { id, authorId: reqUser.user.sub, deletedAt: null },
-    select: { id: true },
+  const articleExists = await prisma.article.findFirst({
+    where: { id, deletedAt: null },
+    select: { id: true, authorId: true },
   });
-  if (!existing) {
-    const anyArticle = await prisma.article.findUnique({
-      where: { id },
-      select: { authorId: true },
-    });
-    if (anyArticle && anyArticle.authorId !== reqUser.user.sub) {
-      res
-        .status(403)
-        .json(baseResponse(false, "Forbidden", null, ["Forbidden"]));
-      return;
-    }
+  if (!articleExists) {
     res
       .status(404)
       .json(baseResponse(false, "Not found", null, ["Article not found"]));
+    return;
+  }
+  if (articleExists.authorId !== reqUser.user.sub) {
+    res.status(403).json(baseResponse(false, "Forbidden", null, ["Forbidden"]));
     return;
   }
   await prisma.article.update({
@@ -162,7 +155,7 @@ export const deleteArticle: RequestHandler = async (req, res) => {
   res.json(baseResponse(true, "Deleted", null, null));
 };
 
-export const getArticlesMe: RequestHandler = async (req, res) => {
+export const getMyArticles: RequestHandler = async (req, res) => {
   const queryResult = articlesMeQuerySchema.safeParse(req.query);
   if (!queryResult.success) {
     res.status(400).json(
