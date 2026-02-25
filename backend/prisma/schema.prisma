@@ -58,6 +58,10 @@ model Article {
   updatedAt  DateTime      @updatedAt      @db.Timestamp(6)
   deletedAt  DateTime?     @db.Timestamp(6)
 
+  @@index([authorId])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([createdAt])
   @@map("articles")
 }
 
