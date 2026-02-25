@@ -1,11 +1,9 @@
 import type { RequestHandler } from "express";
-import { PrismaClient } from "@prisma/client";
 import argon2 from "argon2";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { baseResponse } from "../../types/response.js";
-
-const prisma = new PrismaClient();
+import { prisma } from "../../lib/prisma.js";
 
 const PASSWORD_REGEX =
   /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&.#^()[\]{}\-_=+|\\:;"'<>,/`~]).+$/;
@@ -13,7 +11,7 @@ const JWT_EXPIRES_IN = "24h";
 
 export const registerSchema = z.object({
   name: z.string().min(1).max(255),
-  email: z.string().email(),
+  email: z.email(),
   password: z
     .string()
     .min(8)
@@ -25,7 +23,7 @@ export const registerSchema = z.object({
 });
 
 export const loginSchema = z.object({
-  email: z.string().email(),
+  email: z.email(),
   password: z.string().min(1),
 });
 
@@ -37,7 +35,9 @@ export const register: RequestHandler = async (req, res) => {
         false,
         "Validation failed",
         null,
-        (parsed.error as { issues: Array<{ message: string }> }).issues.map((e) => e.message),
+        (parsed.error as { issues: Array<{ message: string }> }).issues.map(
+          (e) => e.message,
+        ),
       ),
     );
     return;
@@ -69,7 +69,9 @@ export const login: RequestHandler = async (req, res) => {
         false,
         "Validation failed",
         null,
-        (parsed.error as { issues: Array<{ message: string }> }).issues.map((e) => e.message),
+        (parsed.error as { issues: Array<{ message: string }> }).issues.map(
+          (e) => e.message,
+        ),
       ),
     );
     return;

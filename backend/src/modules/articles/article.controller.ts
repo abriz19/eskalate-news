@@ -61,7 +61,9 @@ export const updateArticle: RequestHandler = async (req, res) => {
         false,
         "Validation failed",
         null,
-        (paramResult.error as { issues: Array<{ message: string }> }).issues.map((e) => e.message),
+        (
+          paramResult.error as { issues: Array<{ message: string }> }
+        ).issues.map((e) => e.message),
       ),
     );
     return;
@@ -124,7 +126,9 @@ export const deleteArticle: RequestHandler = async (req, res) => {
         false,
         "Validation failed",
         null,
-        (paramResult.error as { issues: Array<{ message: string }> }).issues.map((e) => e.message),
+        (
+          paramResult.error as { issues: Array<{ message: string }> }
+        ).issues.map((e) => e.message),
       ),
     );
     return;
@@ -166,7 +170,9 @@ export const getArticlesMe: RequestHandler = async (req, res) => {
         false,
         "Validation failed",
         null,
-        (queryResult.error as { issues: Array<{ message: string }> }).issues.map((e) => e.message),
+        (
+          queryResult.error as { issues: Array<{ message: string }> }
+        ).issues.map((e) => e.message),
       ),
     );
     return;
@@ -195,7 +201,9 @@ export const getPublicFeed: RequestHandler = async (req, res) => {
         false,
         "Validation failed",
         null,
-        (queryResult.error as { issues: Array<{ message: string }> }).issues.map((e) => e.message),
+        (
+          queryResult.error as { issues: Array<{ message: string }> }
+        ).issues.map((e) => e.message),
       ),
     );
     return;
@@ -231,7 +239,9 @@ export const getArticleById: RequestHandler = async (req, res) => {
         false,
         "Validation failed",
         null,
-        (paramResult.error as { issues: Array<{ message: string }> }).issues.map((e) => e.message),
+        (
+          paramResult.error as { issues: Array<{ message: string }> }
+        ).issues.map((e) => e.message),
       ),
     );
     return;
