@@ -1,83 +1,115 @@
 import type { RequestHandler } from "express";
 import { PrismaClient } from "@prisma/client";
 import argon2 from "argon2";
-import jwt, { type SignOptions } from "jsonwebtoken";
+import jwt from "jsonwebtoken";
 import { z } from "zod";
+import { baseResponse } from "../../types/response.js";
 
 const prisma = new PrismaClient();
 
-// Validation schemas
-const registerSchema = z.object({
-  name: z
-    .string()
-    .regex(/^[A-Za-z ]+$/, "Name must contain only letters and spaces"),
-  email: z.email(),
+const PASSWORD_REGEX =
+  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&.#^()[\]{}\-_=+|\\:;"'<>,/`~]).+$/;
+const JWT_EXPIRES_IN = "24h";
+
+export const registerSchema = z.object({
+  name: z.string().min(1).max(255),
+  email: z.string().email(),
   password: z
     .string()
     .min(8)
     .regex(
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&.#^()[\]{}\-_=+|\\:;"'<>,/`~]).+$/,
-      "Password must contain uppercase, lowercase, number, and special character",
+      PASSWORD_REGEX,
+      "Password must include uppercase, lowercase, number and special character",
     ),
-  role: z.enum(["AUTHOR", "READER"], "Role must be either AUTHOR or READER"),
+  role: z.enum(["AUTHOR", "READER"]),
 });
 
-const loginSchema = z.object({
-  email: z.email(),
-  password: z.string().min(8),
+export const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
 });
 
-// Register
 export const register: RequestHandler = async (req, res) => {
-  try {
-    const { name, email, password, role } = registerSchema.parse(req.body);
-
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) {
-      res.status(409).json({ message: "Email already exists" });
-      return;
-    }
-
-    const hashedPassword = await argon2.hash(password);
-
-    const user = await prisma.user.create({
-      data: { name, email, password: hashedPassword, role },
-    });
-
-    res.status(201).json({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    });
-  } catch (err: any) {
-    res.status(400).json({ message: err.message });
+  const parsed = registerSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json(
+      baseResponse(
+        false,
+        "Validation failed",
+        null,
+        (parsed.error as { issues: Array<{ message: string }> }).issues.map((e) => e.message),
+      ),
+    );
+    return;
   }
+  const { name, email, password, role } = parsed.data;
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    res
+      .status(409)
+      .json(baseResponse(false, "Conflict", null, ["Email already exists"]));
+    return;
+  }
+
+  const hashedPassword = await argon2.hash(password);
+  const user = await prisma.user.create({
+    data: { name, email, password: hashedPassword, role },
+    select: { id: true, name: true, email: true, role: true },
+  });
+
+  res.status(201).json(baseResponse(true, "Registered", user, null));
 };
 
 export const login: RequestHandler = async (req, res) => {
-  try {
-    const { email, password } = loginSchema.parse(req.body);
-
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      res.status(400).json({ message: "Invalid credentials" });
-      return;
-    }
-
-    const valid = await argon2.verify(user.password, password);
-    if (!valid) {
-      res.status(400).json({ message: "Invalid credentials" });
-      return;
-    }
-
-    const token = jwt.sign(
-      { sub: user.id, role: user.role },
-      process.env.JWT_SECRET as string,
-      { expiresIn: Number(process.env.EXPIRES_IN_SECONDS) },
+  const parsed = loginSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json(
+      baseResponse(
+        false,
+        "Validation failed",
+        null,
+        (parsed.error as { issues: Array<{ message: string }> }).issues.map((e) => e.message),
+      ),
     );
-    res.json({ token });
-  } catch (err: any) {
-    res.status(400).json({ message: err.message });
+    return;
   }
+  const { email, password } = parsed.data;
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    res
+      .status(401)
+      .json(
+        baseResponse(false, "Invalid credentials", null, [
+          "Invalid credentials",
+        ]),
+      );
+    return;
+  }
+
+  const valid = await argon2.verify(user.password, password);
+  if (!valid) {
+    res
+      .status(401)
+      .json(
+        baseResponse(false, "Invalid credentials", null, [
+          "Invalid credentials",
+        ]),
+      );
+    return;
+  }
+
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    res
+      .status(500)
+      .json(baseResponse(false, "Server error", null, ["Configuration error"]));
+    return;
+  }
+
+  const token = jwt.sign({ sub: user.id, role: user.role }, secret, {
+    expiresIn: JWT_EXPIRES_IN,
+  });
+  res.json(baseResponse(true, "OK", { token }, null));
 };
