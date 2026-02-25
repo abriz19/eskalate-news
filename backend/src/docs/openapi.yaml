@@ -1,0 +1,981 @@
+openapi: 3.1.0
+info:
+  title: Eskalate News API
+  version: 1.0.0
+  description: |
+    Backend API for Eskalate News.
+
+    - Node.js, Express, TypeScript, Prisma, PostgreSQL
+    - JWT-based authentication
+    - Role-based access control (RBAC) with AUTHOR and READER roles
+    - Article lifecycle: Draft, Published, Soft Deleted
+    - Read tracking and analytics optimized for millions of ReadLog entries/day
+
+servers:
+  - url: /api
+    description: API base path
+
+tags:
+  - name: Auth
+    description: Authentication and user registration
+  - name: Articles
+    description: Public and author-only article operations
+  - name: Author
+    description: Author dashboard and analytics
+  - name: System
+    description: System-level endpoints
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT Bearer token. Use the token returned from /auth/login as:
+        `Authorization: Bearer {token}`.
+
+  schemas:
+    Role:
+      type: string
+      description: User role (RBAC)
+      enum:
+        - AUTHOR
+        - READER
+
+    ArticleStatus:
+      type: string
+      description: Article publication status
+      enum:
+        - DRAFT
+        - PUBLISHED
+
+    User:
+      type: object
+      description: Public user representation
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 255
+        email:
+          type: string
+          format: email
+        role:
+          $ref: "#/components/schemas/Role"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - email
+        - role
+        - createdAt
+        - updatedAt
+
+    AuthRegisterRequest:
+      type: object
+      description: Registration payload (validated via Zod)
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+          description: Must include uppercase, lowercase, number and special character.
+        role:
+          $ref: "#/components/schemas/Role"
+      required:
+        - name
+        - email
+        - password
+        - role
+      example:
+        name: Jane Doe
+        email: jane@example.com
+        password: Str0ngP@ssw0rd!
+        role: AUTHOR
+
+    AuthLoginRequest:
+      type: object
+      description: Login payload (validated via Zod)
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+      required:
+        - email
+        - password
+      example:
+        email: jane@example.com
+        password: Str0ngP@ssw0rd!
+
+    AuthTokenObject:
+      type: object
+      description: Authentication token container
+      properties:
+        token:
+          type: string
+          description: JWT access token
+      required:
+        - token
+      example:
+        token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+    Article:
+      type: object
+      description: Full article representation
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 150
+        content:
+          type: string
+          minLength: 50
+        category:
+          type: string
+          minLength: 1
+          maxLength: 100
+        status:
+          $ref: "#/components/schemas/ArticleStatus"
+        authorId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        author:
+          type: object
+          description: Embedded author summary (present on some endpoints)
+          properties:
+            name:
+              type: string
+          required:
+            - name
+      required:
+        - id
+        - title
+        - content
+        - category
+        - status
+        - authorId
+        - createdAt
+        - updatedAt
+
+    ArticleCreateRequest:
+      type: object
+      description: Create article payload (validated via Zod)
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 150
+        content:
+          type: string
+          minLength: 50
+        category:
+          type: string
+          minLength: 1
+          maxLength: 100
+      required:
+        - title
+        - content
+        - category
+      example:
+        title: "Breaking News: API Launched"
+        content: >
+          Today we launched the new Eskalate News API, providing blazing-fast
+          access to curated news content for millions of users worldwide.
+        category: Technology
+
+    ArticleUpdateRequest:
+      type: object
+      description: Update article payload (validated via Zod)
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 150
+        content:
+          type: string
+          minLength: 50
+        category:
+          type: string
+          minLength: 1
+          maxLength: 100
+        status:
+          $ref: "#/components/schemas/ArticleStatus"
+      additionalProperties: false
+      example:
+        title: "Updated Headline: API v2 Incoming"
+        status: PUBLISHED
+
+    AuthorDashboardItem:
+      type: object
+      description: Aggregated per-article dashboard item for an author
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        TotalViews:
+          type: integer
+          format: int64
+          description: Total number of views across all days (sum of DailyAnalytics.viewCount)
+      required:
+        - id
+        - title
+        - createdAt
+        - TotalViews
+
+    BaseResponse:
+      type: object
+      description: Base API response wrapper
+      properties:
+        Success:
+          type: boolean
+        Message:
+          type: string
+        Object:
+          nullable: true
+          description: Payload object; type varies by endpoint
+        Errors:
+          type: array
+          nullable: true
+          items:
+            type: string
+      required:
+        - Success
+        - Message
+        - Object
+        - Errors
+      example:
+        Success: true
+        Message: OK
+        Object:
+          status: running
+        Errors: null
+
+    PaginatedResponse:
+      type: object
+      description: Paginated response wrapper for lists
+      properties:
+        Success:
+          type: boolean
+          const: true
+        Message:
+          type: string
+        Object:
+          type: array
+          items:
+            type: object
+          description: List payload; item type varies by endpoint
+        PageNumber:
+          type: integer
+          format: int32
+          minimum: 1
+        PageSize:
+          type: integer
+          format: int32
+          minimum: 1
+        TotalSize:
+          type: integer
+          format: int64
+          minimum: 0
+        Errors:
+          type: "null"
+      required:
+        - Success
+        - Message
+        - Object
+        - PageNumber
+        - PageSize
+        - TotalSize
+        - Errors
+
+    BaseResponse_User:
+      allOf:
+        - $ref: "#/components/schemas/BaseResponse"
+        - type: object
+          properties:
+            Object:
+              $ref: "#/components/schemas/User"
+          example:
+            Success: true
+            Message: Registered
+            Object:
+              id: 7c1c9a8d-4d6a-4b0b-9f2b-8f12fcb32f1d
+              name: Jane Doe
+              email: jane@example.com
+              role: AUTHOR
+              createdAt: 2026-02-25T10:00:00.000Z
+              updatedAt: 2026-02-25T10:00:00.000Z
+            Errors: null
+
+    BaseResponse_AuthToken:
+      allOf:
+        - $ref: "#/components/schemas/BaseResponse"
+        - type: object
+          properties:
+            Object:
+              $ref: "#/components/schemas/AuthTokenObject"
+          example:
+            Success: true
+            Message: OK
+            Object:
+              token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+            Errors: null
+
+    BaseResponse_Article:
+      allOf:
+        - $ref: "#/components/schemas/BaseResponse"
+        - type: object
+          properties:
+            Object:
+              $ref: "#/components/schemas/Article"
+          example:
+            Success: true
+            Message: OK
+            Object:
+              id: 1c3b84c0-5c9b-4a30-8a07-1f9f9e7e5a01
+              title: "Breaking News: API Launched"
+              content: Today we launched the new Eskalate News API...
+              category: Technology
+              status: PUBLISHED
+              authorId: 7c1c9a8d-4d6a-4b0b-9f2b-8f12fcb32f1d
+              createdAt: 2026-02-25T10:00:00.000Z
+              updatedAt: 2026-02-25T10:05:00.000Z
+              author:
+                name: Jane Doe
+            Errors: null
+
+    PaginatedResponse_ArticlePublic:
+      allOf:
+        - $ref: "#/components/schemas/PaginatedResponse"
+        - type: object
+          properties:
+            Object:
+              type: array
+              items:
+                $ref: "#/components/schemas/Article"
+          example:
+            Success: true
+            Message: OK
+            Object:
+              - id: 1c3b84c0-5c9b-4a30-8a07-1f9f9e7e5a01
+                title: "Breaking News: API Launched"
+                content: Today we launched the new Eskalate News API...
+                category: Technology
+                status: PUBLISHED
+                authorId: 7c1c9a8d-4d6a-4b0b-9f2b-8f12fcb32f1d
+                createdAt: 2026-02-25T10:00:00.000Z
+                author:
+                  name: Jane Doe
+            PageNumber: 1
+            PageSize: 10
+            TotalSize: 1234
+            Errors: null
+
+    PaginatedResponse_ArticleAuthorList:
+      allOf:
+        - $ref: "#/components/schemas/PaginatedResponse"
+        - type: object
+          properties:
+            Object:
+              type: array
+              items:
+                $ref: "#/components/schemas/Article"
+          example:
+            Success: true
+            Message: OK
+            Object:
+              - id: 1c3b84c0-5c9b-4a30-8a07-1f9f9e7e5a01
+                title: Draft Article
+                content: This is a draft article...
+                category: Technology
+                status: DRAFT
+                authorId: 7c1c9a8d-4d6a-4b0b-9f2b-8f12fcb32f1d
+                createdAt: 2026-02-25T09:00:00.000Z
+                updatedAt: 2026-02-25T09:05:00.000Z
+            PageNumber: 1
+            PageSize: 10
+            TotalSize: 5
+            Errors: null
+
+    PaginatedResponse_AuthorDashboard:
+      allOf:
+        - $ref: "#/components/schemas/PaginatedResponse"
+        - type: object
+          properties:
+            Object:
+              type: array
+              items:
+                $ref: "#/components/schemas/AuthorDashboardItem"
+          example:
+            Success: true
+            Message: OK
+            Object:
+              - id: 1c3b84c0-5c9b-4a30-8a07-1f9f9e7e5a01
+                title: "Breaking News: API Launched"
+                createdAt: "2026-02-25T10:00:00.000Z"
+                TotalViews: 50234
+            PageNumber: 1
+            PageSize: 10
+            TotalSize: 3
+            Errors: null
+
+    ErrorResponse:
+      $ref: "#/components/schemas/BaseResponse"
+
+paths:
+  /:
+    get:
+      tags: [System]
+      summary: Health check
+      description: Simple health check endpoint to verify the API is running.
+      responses:
+        "200":
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BaseResponse"
+              example:
+                Success: true
+                Message: OK
+                Object:
+                  status: running
+                Errors: null
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      description: |
+        Registers a new user with the specified role (AUTHOR or READER).
+
+        Validation is enforced via Zod:
+        - name: 1–255 characters
+        - email: valid email address
+        - password: at least 8 characters and must include uppercase, lowercase, number and special character.
+        - role: AUTHOR or READER
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthRegisterRequest"
+      responses:
+        "201":
+          description: User successfully registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BaseResponse_User"
+        "400":
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                Success: false
+                Message: Validation failed
+                Object: null
+                Errors:
+                  - Password must include uppercase, lowercase, number and special character
+        "409":
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                Success: false
+                Message: Conflict
+                Object: null
+                Errors:
+                  - Email already exists
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      description: |
+        Authenticates a user and returns a JWT access token.
+
+        Validation is enforced via Zod:
+        - email: valid email address
+        - password: non-empty string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthLoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BaseResponse_AuthToken"
+        "400":
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                Success: false
+                Message: Validation failed
+                Object: null
+                Errors:
+                  - Email must be a valid email
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                Success: false
+                Message: Invalid credentials
+                Object: null
+                Errors:
+                  - Invalid credentials
+        "500":
+          description: Server configuration error (missing JWT secret)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /articles:
+    get:
+      tags: [Articles]
+      summary: Get public article feed
+      description: |
+        Returns a paginated public feed of published, non-deleted articles.
+
+        Backed by Prisma queries filtered with:
+        - status = PUBLISHED
+        - deletedAt = null
+
+        Read tracking is handled separately via the article detail endpoint.
+      parameters:
+        - name: page
+          in: query
+          description: Page number (1-based, default 1)
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            default: 1
+        - name: size
+          in: query
+          description: Page size (1–50, default 10)
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 50
+            default: 10
+        - name: category
+          in: query
+          description: Filter by category (exact match)
+          required: false
+          schema:
+            type: string
+        - name: author
+          in: query
+          description: Filter by author name (case-insensitive substring match)
+          required: false
+          schema:
+            type: string
+        - name: q
+          in: query
+          description: Full-text search on article title (case-insensitive)
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Paginated list of public articles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse_ArticlePublic"
+        "400":
+          description: Validation failed (invalid pagination or query params)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      tags: [Articles]
+      summary: Create article
+      description: |
+        Creates a new article in DRAFT status for the authenticated AUTHOR.
+
+        The article is associated with the authenticated user's ID as authorId.
+      security:
+        - bearerAuth: []
+      x-roles:
+        - AUTHOR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleCreateRequest"
+      responses:
+        "201":
+          description: Article created (initially DRAFT)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BaseResponse_Article"
+        "400":
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid JWT token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Authenticated but not an AUTHOR
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server configuration error (missing JWT secret)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /articles/me:
+    get:
+      tags: [Articles]
+      summary: Get my articles
+      description: |
+        Returns a paginated list of articles owned by the authenticated AUTHOR.
+
+        - By default, only non-deleted articles are returned.
+        - Soft-deleted articles can be included via includeDeleted=true.
+      security:
+        - bearerAuth: []
+      x-roles:
+        - AUTHOR
+      parameters:
+        - name: page
+          in: query
+          description: Page number (1-based, default 1)
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            default: 1
+        - name: size
+          in: query
+          description: Page size (1–50, default 10)
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 50
+            default: 10
+        - name: includeDeleted
+          in: query
+          description: Include soft-deleted articles when set to "true".
+          required: false
+          schema:
+            type: string
+            enum: ["true", "false"]
+            default: "false"
+      responses:
+        "200":
+          description: Paginated list of the author's own articles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse_ArticleAuthorList"
+        "400":
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid JWT token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Authenticated but not an AUTHOR
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /articles/{id}:
+    get:
+      tags: [Articles]
+      summary: Get article by ID (with read tracking)
+      description: |
+        Returns a single published or draft article by ID (if not soft-deleted).
+
+        - If the article has been soft-deleted, returns 410 Gone.
+        - If the article does not exist, returns 404 Not Found.
+        - Read tracking: each successful call logs a `ReadLog` entry for analytics,
+          associated with the authenticated user if a JWT is provided, or as "guest"
+          otherwise. A 10-second per-article per-reader cooldown is enforced in-memory
+          to avoid excessive write load (millions of ReadLog entries/day).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Article ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Article found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BaseResponse_Article"
+        "400":
+          description: Validation failed (invalid UUID)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Article not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "410":
+          description: Article has been soft-deleted and is no longer available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    put:
+      tags: [Articles]
+      summary: Update article
+      description: |
+        Updates an existing article owned by the authenticated AUTHOR.
+
+        - Only the owner (AUTHOR) of the article can update it.
+        - Soft-deleted articles cannot be updated.
+        - Status can be changed between DRAFT and PUBLISHED.
+      security:
+        - bearerAuth: []
+      x-roles:
+        - AUTHOR
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Article ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleUpdateRequest"
+      responses:
+        "200":
+          description: Article updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BaseResponse_Article"
+        "400":
+          description: Validation failed (ID or body)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid JWT token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Authenticated but not the article owner or not an AUTHOR
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Article not found (or already soft-deleted)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags: [Articles]
+      summary: Soft delete article
+      description: |
+        Soft deletes an article owned by the authenticated AUTHOR.
+
+        - Performs a soft delete by setting deletedAt, preserving data for analytics.
+        - Soft-deleted articles are excluded from public feeds and detail views
+          (which return 410 Gone).
+      security:
+        - bearerAuth: []
+      x-roles:
+        - AUTHOR
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Article ID (UUID)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Article soft-deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BaseResponse"
+              example:
+                Success: true
+                Message: Deleted
+                Object: null
+                Errors: null
+        "400":
+          description: Validation failed (invalid UUID)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid JWT token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Authenticated but not the article owner or not an AUTHOR
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Article not found (already soft-deleted or nonexistent)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /author/dashboard:
+    get:
+      tags: [Author]
+      summary: Author dashboard
+      description: |
+        Returns a paginated dashboard for the authenticated AUTHOR, including
+        aggregated view counts per article.
+
+        - Only non-deleted articles are included.
+        - TotalViews is computed as the sum of DailyAnalytics.viewCount for each article.
+      security:
+        - bearerAuth: []
+      x-roles:
+        - AUTHOR
+      parameters:
+        - name: page
+          in: query
+          description: Page number (1-based, default 1)
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            default: 1
+        - name: size
+          in: query
+          description: Page size (1–50, default 10)
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        "200":
+          description: Paginated author dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedResponse_AuthorDashboard"
+        "400":
+          description: Validation failed (invalid pagination parameters)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid JWT token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Authenticated but not an AUTHOR
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
