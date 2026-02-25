@@ -8,7 +8,7 @@ import {
 
 const mockUserFindUnique = jest.fn();
 const mockUserCreate = jest.fn();
-jest.mock("../lib/prisma.js", () => ({
+jest.mock("../src/lib/prisma.js", () => ({
   prisma: {
     user: { findUnique: mockUserFindUnique, create: mockUserCreate },
     article: { findFirst: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), count: jest.fn() },
@@ -21,7 +21,7 @@ jest.mock("argon2", () => ({
   verify: jest.fn().mockResolvedValue(true),
 }));
 
-import app from "../app.js";
+import app from "../src/app.js";
 
 describe("Auth API", () => {
   beforeEach(() => {

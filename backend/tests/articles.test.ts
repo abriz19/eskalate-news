@@ -7,7 +7,7 @@ import {
   TEST_USER_READER,
   TEST_ARTICLE_ID,
 } from "./helpers.js";
-import { resetReadTrackingForTests } from "../modules/articles/readTracking.js";
+import { resetReadTrackingForTests } from "../src/modules/articles/readTracking.js";
 
 const mockArticleFindFirst = jest.fn();
 const mockArticleFindMany = jest.fn();
@@ -17,7 +17,7 @@ const mockArticleUpdate = jest.fn();
 const mockArticleCount = jest.fn();
 const mockReadLogCreate = jest.fn();
 
-jest.mock("../lib/prisma.js", () => ({
+jest.mock("../src/lib/prisma.js", () => ({
   prisma: {
     user: { findUnique: jest.fn(), create: jest.fn() },
     article: {
@@ -32,7 +32,7 @@ jest.mock("../lib/prisma.js", () => ({
   },
 }));
 
-import app from "../app.js";
+import app from "../src/app.js";
 
 describe("Articles API", () => {
   const authorToken = createAuthToken(TEST_USER_AUTHOR.id, "AUTHOR");

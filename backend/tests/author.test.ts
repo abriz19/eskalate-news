@@ -11,7 +11,7 @@ import {
 const mockArticleFindMany = jest.fn();
 const mockArticleCount = jest.fn();
 
-jest.mock("../lib/prisma.js", () => ({
+jest.mock("../src/lib/prisma.js", () => ({
   prisma: {
     user: { findUnique: jest.fn(), create: jest.fn() },
     article: {
@@ -26,7 +26,7 @@ jest.mock("../lib/prisma.js", () => ({
   },
 }));
 
-import app from "../app.js";
+import app from "../src/app.js";
 
 describe("Author Dashboard API", () => {
   const authorToken = createAuthToken(TEST_USER_AUTHOR.id, "AUTHOR");

@@ -2,10 +2,10 @@
   "name": "eskalate-news",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
     "test": "jest",
-    "dev": "tsc -w & nodemon dist/server.js",
+    "dev": "tsc -w & nodemon dist/index.js",
     "build": "tsc"
   },
   "keywords": [],

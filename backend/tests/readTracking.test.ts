@@ -3,7 +3,7 @@ import {
   pruneReadTracking,
   resetReadTrackingForTests,
   READ_COOLDOWN_MS,
-} from "../modules/articles/readTracking.js";
+} from "../src/modules/articles/readTracking.js";
 
 describe("Read tracking cooldown", () => {
   const articleId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
